@@ -1,85 +1,84 @@
-import os
-import re
 import cv2 # opencv
 import numpy as np
-import time
 
-# get file names of the frames
-col_frames = os.listdir('./dji_0270_frames/')
 
-# sort file names
-col_frames.sort(key=lambda f: int(re.sub('\D', '', f)))
+def main():
+    cap = cv2.VideoCapture("./DJI_0270.MP4")
+    while not cap.isOpened():
+        cap = cv2.VideoCapture("./DJI_0270.MP4")
+        cv2.waitKey(1000)
+        print("Wait for the header")
 
-# empty list to store the frames
-col_images=[]
+    # kernel for image dilation
+    kernel = np.ones((4, 4), np.uint8)
 
-for i in col_frames:
-    # read the frames
-    img = cv2.imread('./dji_0270_frames/'+i)
-    # append the frames to the list
-    col_images.append(img)
+    # font style
+    font = cv2.FONT_HERSHEY_SIMPLEX
 
-# kernel for image dilation
-kernel = np.ones((4, 4), np.uint8)
+    # Gets a previous frame before the loop
+    ret, frame = cap.read()
+    while True:
+        prevframe = frame[:]
+        ret, frame = cap.read()
 
-# font style
-font = cv2.FONT_HERSHEY_SIMPLEX
+        # frame differencing
+        grayA = cv2.cvtColor(prevframe, cv2.COLOR_BGR2GRAY)
+        grayB = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        diff_image = cv2.absdiff(grayB, grayA)
 
-# directory to save the ouput frames
-pathIn = "./temp_frames_0270/"
+        # image thresholding
+        ret, thresh = cv2.threshold(diff_image, 50, 255, cv2.THRESH_BINARY)
 
-# specify video name
-pathOut = './dji270_withcountours.mp4v'
+        # image dilation
+        dilated = cv2.dilate(thresh, kernel, iterations=1)
 
-# specify frames per second
-fps = 30.0
+        # find contours
+        contours, hierarchy = cv2.findContours(dilated.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
-out = cv2.VideoWriter(pathOut, cv2.VideoWriter_fourcc(*'DIVX'), fps, (1920, 1080))
+        # countours
+        valid_cntrs = []
+        for cntr in contours:
+            x, y, w, h = cv2.boundingRect(cntr)
+            # Setting the minimum size of something to be a contour
+            if (y <= 520) and cv2.contourArea(cntr) >= 10000:
+                valid_cntrs.append(cntr)
 
-for i in range(len(col_images) - 1):
+        # add contours to original frames
+        dmy = frame.copy()
+        cv2.drawContours(dmy, valid_cntrs, -1, (127, 200, 0), 2)
 
-    # frame differencing
-    grayA = cv2.cvtColor(col_images[i], cv2.COLOR_BGR2GRAY)
-    grayB = cv2.cvtColor(col_images[i + 1], cv2.COLOR_BGR2GRAY)
-    diff_image = cv2.absdiff(grayB, grayA)
+        cv2.putText(dmy, "Vehicles detected: " + str(len(valid_cntrs)), (55, 15), font, 0.6, (0, 180, 0), 2)
 
-    # image thresholding
-    ret, thresh = cv2.threshold(diff_image, 50, 255, cv2.THRESH_BINARY)
+        # Regular image window
+        cv2.namedWindow("regular_window", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("regular_window", 960, 540)
+        cv2.moveWindow("regular_window", 0, 0)
+        cv2.imshow("regular_window", frame)
 
-    # image dilation
-    dilated = cv2.dilate(thresh, kernel, iterations=1)
+        # Image difference window
+        cv2.namedWindow("Diff_image_window", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("Diff_image_window", 960, 540)
+        cv2.moveWindow("Diff_image_window", 960, 0)
+        cv2.imshow("Diff_image_window", diff_image)
 
-    # find contours
-    contours, hierarchy = cv2.findContours(dilated.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+        # Thresh window
+        cv2.namedWindow("thresh_window", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("thresh_window", 960, 540)
+        cv2.moveWindow("thresh_window", 0, 540)
+        cv2.imshow("thresh_window", thresh)
 
-    # countours
-    valid_cntrs = []
-    for cntr in contours:
-        x, y, w, h = cv2.boundingRect(cntr)
-        # Setting the minimum size of something to be a contour
-        if (y <= 520) and cv2.contourArea(cntr) >= 1000:
-            valid_cntrs.append(cntr)
+        # Countour window
+        cv2.namedWindow("contour_window", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("contour_window", 960, 540)
+        cv2.moveWindow("contour_window", 960, 540)
+        cv2.imshow("contour_window", dmy)
 
-    # add contours to original frames
-    dmy = col_images[i].copy()
-    cv2.drawContours(dmy, valid_cntrs, -1, (127, 200, 0), 2)
+        # 1ms delay which makes the windows appear as if it is video with pictures
+        cv2.waitKey(1)
 
-    cv2.putText(dmy, "Vehicles detected: " + str(len(valid_cntrs)), (55, 15), font, 0.6, (0, 180, 0), 2)
+        if cap.get(cv2.CAP_PROP_POS_FRAMES) == cap.get(cv2.CAP_PROP_FRAME_COUNT):
+            # If the number of captured frames is equal to the total number of frames, stop
+            break
 
-    out.write(dmy)
-
-    # Regular image window
-
-    # Image difference window
-    cv2.namedWindow("Diff_image_window", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("Diff_image_window", 960, 540)
-    cv2.moveWindow("Diff_image_window", 960, 0)
-    cv2.imshow("Diff_image_window", diff_image)
-
-    # Thresh window
-
-    # Countour window
-
-    cv2.waitKey(1)
-
-out.release()
+if __name__ == '__main__':
+    main()
