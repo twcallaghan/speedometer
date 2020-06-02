@@ -17,6 +17,9 @@ def main():
 
     # Gets a previous frame before the loop
     ret, frame = cap.read()
+
+    prevx = None
+    speed = 0
     while True:
         prevframe = frame[:]
         ret, frame = cap.read()
@@ -36,11 +39,18 @@ def main():
         contours, hierarchy = cv2.findContours(dilated.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
         # countours
+        # Approx 0.61222 inches / pixel
         valid_cntrs = []
         for cntr in contours:
             x, y, w, h = cv2.boundingRect(cntr)
             # Setting the minimum size of something to be a contour
-            if (y <= 520) and cv2.contourArea(cntr) >= 10000:
+            if (y <= 400) and cv2.contourArea(cntr) >= 10000:
+                if prevx is None:
+                    prevx = x
+                else:
+                    inches = abs(x - prevx) * 0.61222  # inches in 1/30 of a second
+                    speed = inches * (30 / 17.6)  # should be mph as in/s -> mph is 1/17.6
+                    prevx = x
                 valid_cntrs.append(cntr)
 
         # add contours to original frames
@@ -48,6 +58,7 @@ def main():
         cv2.drawContours(dmy, valid_cntrs, -1, (127, 200, 0), 2)
 
         cv2.putText(dmy, "Vehicles detected: " + str(len(valid_cntrs)), (55, 15), font, 0.6, (0, 180, 0), 2)
+        cv2.putText(dmy, "Speed: " + str(speed) + " mph", (500, 105), font, 4, (200, 0, 0), 10)
 
         # Regular image window
         cv2.namedWindow("regular_window", cv2.WINDOW_NORMAL)
@@ -79,6 +90,7 @@ def main():
         if cap.get(cv2.CAP_PROP_POS_FRAMES) == cap.get(cv2.CAP_PROP_FRAME_COUNT):
             # If the number of captured frames is equal to the total number of frames, stop
             break
+
 
 if __name__ == '__main__':
     main()
