@@ -48,7 +48,9 @@ def main():
         # Call out to get the user to give a distance
         if key == ord("m"):
             cv2.imwrite("./firstframe.ppm", frame)
+            # TODO: make the program pause until after this is done
             initialdist.getinitialdistance()
+            cv2.waitKey()
             os.remove("./firstframe.ppm")
 
         prevframe = frame[:]
