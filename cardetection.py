@@ -49,8 +49,10 @@ def main():
         if key == ord("m"):
             cv2.imwrite("./firstframe.ppm", frame)
             # TODO: make the program pause until after this is done
-            initialdist.getinitialdistance()
-            cv2.waitKey()
+            while initialdist.run is True:
+                initialdist.main()
+                #fps.stop()
+                cv2.waitKey(0)
             os.remove("./firstframe.ppm")
 
         prevframe = frame[:]
@@ -82,7 +84,7 @@ def main():
                 if prevx is None:
                     prevx = x
                 else:
-                    inches = abs(x - prevx) * initialdist.inchperpixel  # inches in 1/30 of a second
+                    inches = abs(x - prevx) * initialdist.inchesperpixel  # inches in 1/30 of a second
                     speed = inches * (videofps / 17.6)  # should be mph as in/s -> mph is 1/17.6
                     if len(speedvals) < 10 or validspeed(speedvals, speed) is True:
                         speedvals.append(speed)
@@ -93,7 +95,7 @@ def main():
 
         # If there are no contours then continue processing and reset variables until there is something interesting
         # Also displays the first 10 seconds of video for the user to give initial measurement
-        if len(valid_cntrs) == 0 and framecount > (videofps * 10):
+        if len(valid_cntrs) == 0 and (framecount > (videofps * 10) or initialdist.run is False):
             speedvals = []
             cv2.destroyAllWindows()
             continue
