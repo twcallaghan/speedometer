@@ -38,11 +38,41 @@ def shownormalwindow(initialdistvar, carx, cary, frame, speed, font, fps, speedv
     cv2.imshow("regular_window", frame_copy)
 
 
+def showotherwindows(frame, valid_cntrs, font, speed, speedvals, diff_image, thresh):
+    # add contours to original frames
+    dmy = frame.copy()
+    cv2.drawContours(dmy, valid_cntrs, -1, (127, 200, 0), 2)
+
+    cv2.putText(dmy, "Vehicles detected: " + str(len(valid_cntrs)), (55, 800), font, 2, (0, 0, 200), 7)
+    cv2.putText(dmy, "Speed: {:.2f} mph".format(speed), (800, 800), font, 2, (0, 0, 200), 7)
+    if len(speedvals) >= 10:
+        cv2.putText(dmy, "Median Speed: {:.2f} mph".format(speedvals[len(speedvals) // 2]), (55, 900), font, 2,
+                    (0, 0, 200), 7)
+
+    # Image difference window
+    cv2.namedWindow("Diff_image_window", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Diff_image_window", 960, 540)
+    cv2.moveWindow("Diff_image_window", 960, 0)
+    cv2.imshow("Diff_image_window", diff_image)
+
+    # Thresh window
+    cv2.namedWindow("thresh_window", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("thresh_window", 960, 540)
+    cv2.moveWindow("thresh_window", 0, 540)
+    cv2.imshow("thresh_window", thresh)
+
+    # Countour window
+    cv2.namedWindow("contour_window", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("contour_window", 960, 540)
+    cv2.moveWindow("contour_window", 960, 540)
+    cv2.imshow("contour_window", dmy)
+
+
 # TODO: Break up this main into other methods to make it a lot cleaner
 def main():
     # start the file video stream thread and allow the buffer to  start to fill
     # TODO: Test the 271 video to see if that works and import the newest video you took
-    fvs = FileVideoStream("./DJI_0271.MP4").start()
+    fvs = FileVideoStream("./DJI_0270.MP4").start()
     time.sleep(1.0)
 
     # kernel for image dilation
@@ -55,14 +85,13 @@ def main():
     frame = fvs.read()
 
     prevx = None
-    speed = 0
     speedvals = []
     key = None
     framecount = 0
-
     initialdist = initialdistance.InitialDistance()
-
     videofps = 30
+    fps = None
+
     while fvs.more():
         framecount += 1
 
@@ -97,6 +126,7 @@ def main():
         valid_cntrs = []
         cary = 0
         carx = 0
+        speed = 0
         for cntr in contours:
             x, y, w, h = cv2.boundingRect(cntr)
             # Setting the minimum size of something to be a contour
@@ -126,33 +156,8 @@ def main():
             key = cv2.waitKey(1)
             continue
 
-        # add contours to original frames
-        dmy = frame.copy()
-        cv2.drawContours(dmy, valid_cntrs, -1, (127, 200, 0), 2)
-
-        cv2.putText(dmy, "Vehicles detected: " + str(len(valid_cntrs)), (55, 800), font, 2, (0, 0, 200), 7)
-        cv2.putText(dmy, "Speed: {:.2f} mph".format(speed), (800, 800), font, 2, (0, 0, 200), 7)
-        if len(speedvals) >= 10:
-            cv2.putText(dmy, "Median Speed: {:.2f} mph".format(speedvals[len(speedvals) // 2]), (55, 900), font, 2,
-                        (0, 0, 200), 7)
-
-        # Image difference window
-        cv2.namedWindow("Diff_image_window", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Diff_image_window", 960, 540)
-        cv2.moveWindow("Diff_image_window", 960, 0)
-        cv2.imshow("Diff_image_window", diff_image)
-
-        # Thresh window
-        cv2.namedWindow("thresh_window", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("thresh_window", 960, 540)
-        cv2.moveWindow("thresh_window", 0, 540)
-        cv2.imshow("thresh_window", thresh)
-
-        # Countour window
-        cv2.namedWindow("contour_window", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("contour_window", 960, 540)
-        cv2.moveWindow("contour_window", 960, 540)
-        cv2.imshow("contour_window", dmy)
+        # Other windows
+        showotherwindows(frame, valid_cntrs, font, speed, speedvals, diff_image, thresh)
 
         # Regular image window
         if initialdist.inchesperpixel is not None:
