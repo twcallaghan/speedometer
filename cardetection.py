@@ -68,11 +68,9 @@ def showotherwindows(frame, valid_cntrs, font, speed, speedvals, diff_image, thr
     cv2.imshow("contour_window", dmy)
 
 
-# TODO: Break up this main into other methods to make it a lot cleaner
 def main():
     # start the file video stream thread and allow the buffer to  start to fill
-    # TODO: Test the 271 video to see if that works and import the newest video you took
-    fvs = FileVideoStream("./DJI_0270.MP4").start()
+    fvs = FileVideoStream("./DJI_0271.MP4").start()
     time.sleep(1.0)
 
     # kernel for image dilation
@@ -130,7 +128,7 @@ def main():
         for cntr in contours:
             x, y, w, h = cv2.boundingRect(cntr)
             # Setting the minimum size of something to be a contour
-            if cv2.contourArea(cntr) >= 10000:
+            if cv2.contourArea(cntr) >= 5000:
                 if prevx is None:
                     prevx = x
                 else:
