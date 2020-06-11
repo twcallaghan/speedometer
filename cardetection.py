@@ -15,13 +15,35 @@ def validspeed(speedlist, speed):
     return True
 
 
+def shownormalwindow(initialdistvar, carx, cary, frame, speed, font, fps, speedvals):
+    cv2.namedWindow("regular_window", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("regular_window", 960, 540)
+    cv2.moveWindow("regular_window", 0, 0)
+
+    frame_copy = frame.copy()
+    cv2.putText(frame_copy, "Current speed: {:.2f}".format(speed), (carx, cary - 60), font, 1.5, (0, 0, 200), 5)
+
+    if initialdistvar.inchesperpixel is not None:
+        fps.update()
+        # stop the timer and display FPS information
+        fps.stop()
+        cv2.putText(frame_copy, "FPS: {:.2f}".format(fps.fps()), (900, 80), font, 1.5, (0, 0, 200), 5)
+        cv2.putText(frame_copy, "Elasped time: {:.2f} secs".format(fps.elapsed()), (55, 80), font, 1.5,
+                    (0, 0, 200),
+                    5)
+
+    if len(speedvals) > 10:
+        cv2.putText(frame_copy, "Median speed: {:.2f}".format(speedvals[len(speedvals) // 2]),
+                    (carx, cary), font, 1.5, (0, 0, 200), 5)
+    cv2.imshow("regular_window", frame_copy)
+
+
+# TODO: Break up this main into other methods to make it a lot cleaner
 def main():
     # start the file video stream thread and allow the buffer to  start to fill
-    fvs = FileVideoStream("./DJI_0270.MP4").start()
+    # TODO: Test the 271 video to see if that works and import the newest video you took
+    fvs = FileVideoStream("./DJI_0271.MP4").start()
     time.sleep(1.0)
-
-    # start the FPS timer
-    fps = FPS().start()
 
     # kernel for image dilation
     kernel = np.ones((4, 4), np.uint8)
@@ -40,19 +62,17 @@ def main():
 
     initialdist = initialdistance.InitialDistance()
 
-    # TODO: make the user input the fps when they give initial measurement
     videofps = 30
     while fvs.more():
         framecount += 1
 
-        # Call out to get the user to give a distance
-        if key == ord("m"):
+        # Call out to get the user to give a distance. If the user doesn't unput in 5 seconds it forces them to
+        if key == ord("m") or ((framecount > (videofps * 5)) and initialdist.inchesperpixel is None):
             cv2.imwrite("./firstframe.ppm", frame)
-            # TODO: make the program pause until after this is done
             while initialdist.run is True:
                 initialdist.main()
-                #fps.stop()
                 cv2.waitKey(0)
+            fps = FPS().start()
             os.remove("./firstframe.ppm")
 
         prevframe = frame[:]
@@ -80,10 +100,11 @@ def main():
         for cntr in contours:
             x, y, w, h = cv2.boundingRect(cntr)
             # Setting the minimum size of something to be a contour
-            if (y <= 850) and cv2.contourArea(cntr) >= 10000:
+            if cv2.contourArea(cntr) >= 10000:
                 if prevx is None:
                     prevx = x
                 else:
+                    # TODO: Give a margin for what the speed is? Like a range based on margin of error?
                     inches = abs(x - prevx) * initialdist.inchesperpixel  # inches in 1/30 of a second
                     speed = inches * (videofps / 17.6)  # should be mph as in/s -> mph is 1/17.6
                     if len(speedvals) < 10 or validspeed(speedvals, speed) is True:
@@ -94,10 +115,15 @@ def main():
                 carx = x
 
         # If there are no contours then continue processing and reset variables until there is something interesting
-        # Also displays the first 10 seconds of video for the user to give initial measurement
-        if len(valid_cntrs) == 0 and (framecount > (videofps * 10) or initialdist.run is False):
+        # Also displays the first 5 seconds of video for the user to give initial measurement
+        if len(valid_cntrs) == 0 and (framecount > (videofps * 5) or initialdist.run is False):
             speedvals = []
-            cv2.destroyAllWindows()
+            cv2.destroyWindow("Diff_image_window")
+            cv2.destroyWindow("thresh_window")
+            cv2.destroyWindow("contour_window")
+            # Regular image window
+            shownormalwindow(initialdist, carx, cary, frame, speed, font, fps, speedvals)
+            key = cv2.waitKey(1)
             continue
 
         # add contours to original frames
@@ -129,20 +155,10 @@ def main():
         cv2.imshow("contour_window", dmy)
 
         # Regular image window
-        cv2.namedWindow("regular_window", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("regular_window", 960, 540)
-        cv2.moveWindow("regular_window", 0, 0)
-        fps.update()
-        # stop the timer and display FPS information
-        fps.stop()
-        frame_copy = frame.copy()
-        cv2.putText(frame_copy, "Elasped time: {:.2f} secs".format(fps.elapsed()), (55, 80), font, 1.5, (0, 0, 200), 5)
-        cv2.putText(frame_copy, "FPS: {:.2f}".format(fps.fps()), (900, 80), font, 1.5, (0, 0, 200), 5)
-        cv2.putText(frame_copy, "Current speed: {:.2f}".format(speed), (carx, cary - 60), font, 1.5, (0, 0, 200), 5)
-        if len(speedvals) > 10:
-            cv2.putText(frame_copy, "Median speed: {:.2f}".format(speedvals[len(speedvals) // 2]),
-                        (carx, cary), font, 1.5, (0, 0, 200), 5)
-        cv2.imshow("regular_window", frame_copy)
+        if initialdist.inchesperpixel is not None:
+            shownormalwindow(initialdist, carx, cary, frame, speed, font, fps, speedvals)
+        else:
+            shownormalwindow(initialdist, carx, cary, frame, speed, font, None, speedvals)
 
         # 1ms delay which makes the windows appear as if it is video with pictures
         key = cv2.waitKey(1)
