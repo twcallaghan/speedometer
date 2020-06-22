@@ -59,7 +59,6 @@ class InitialDistance:
         self.inchesentry = tk.Entry(self.root, textvariable=self.inches_var)
         button1 = tk.Button(self.root, text='Press after entering how many inches the measurement is',
                             command=self.finish)
-
         inches_label.grid(row=0, column=0)
         self.inchesentry.grid(row=0, column=1)
         button1.grid(row=1, column=0)
