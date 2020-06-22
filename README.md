@@ -1,4 +1,4 @@
-# Speedomoter / Distance Detector meant to be used with drones.
+# Speedometer / Distance Detector meant to be used with drones.
 
 Requirements:
 - Python 3.7
