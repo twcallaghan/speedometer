@@ -11,6 +11,12 @@ import cloudinary.api
 from decimal import *
 import requests
 import threading
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+from dash.dependencies import Input, Output
+import pandas as pd
+import plotly.express as px
 
 # table = dynamodb.create_table(
 #     TableName='maintable',
@@ -46,6 +52,229 @@ import threading
 # # Print out some data about the table.
 # print(table.item_count)
 
+app = dash.Dash('Real Speedometer', external_stylesheets=['/static/reset.css'])
+
+
+def dashapp():
+    # app.css.append_css({'external_stylesheets': '/static/reset.css'})
+    colors = {
+        'background': '#eee2d2',
+        'text': '#505050'
+    }
+
+    app.layout = html.Div(style={'backgroundColor': colors['background']}, children=[
+        html.H1(
+            children='Elm Street Speedometer',
+            style={
+                'textAlign': 'center',
+                'color': colors['text']
+            }
+        ),
+
+        html.P(
+            children='Created in 2021 by Thomas Callaghan.',
+            style={
+                'textAlign': 'center',
+                'color': colors['text']
+            }),
+
+        html.P(
+            children=['Connect with me on LinkedIn at ', dcc.Link(href='linkedin.com/in/twcallaghan'),
+                      ' or checkout my other work at ', dcc.Link(href='thomascallaghan.me'), '.'],
+            style={
+                'textAlign': 'center',
+                'color': colors['text']
+            }),
+
+        html.Br(),
+        html.Br(),
+
+        html.Div(style={'clear': 'both'}, children=[
+            html.H2(
+                children=['Top speed of the day (mph): ', ],
+                style={
+                    'textAlign': 'center',
+                    'color': colors['text'],
+                    'margin-right': '25%',
+                    'margin-left': '15%',
+                    'display': 'inline',
+                }
+            ),
+
+            html.H2(
+                children=['Top speed of all time (mph):', ],
+                style={
+                    'textAlign': 'center',
+                    'color': colors['text'],
+                    'display': 'inline',
+                    'margin-left': '5%',
+                }
+            ),
+
+            # html.Hr(style={'clear': 'both'})
+        ]),
+
+        html.Div(style={'clear': 'both'}, children=[
+            html.H2(
+                id='topofday',
+                style={
+                    'textAlign': 'center',
+                    'color': colors['text'],
+                    'margin-right': '25%',
+                    'margin-left': '23%',
+                    'display': 'inline',
+                }
+            ),
+
+            html.H2(
+                id='topalltime',
+                style={
+                    'textAlign': 'center',
+                    'color': colors['text'],
+                    'margin-left': '23%',
+                    'display': 'inline',
+                }
+            ),
+
+            # html.Hr(style={'clear': 'both'})
+        ]),
+
+        html.Br(),
+
+        html.Div(style={'clear': 'both', 'backgroundColor': colors['background']}, children=[
+            html.Img(
+                id='toptodayimg',
+                style={
+                    'textAlign': 'center',
+                    'width': '30%',
+                    'height': '30%',
+                    'margin-left': '10%'
+                }
+            ),
+
+            html.Img(
+                id='topalltimeimg',
+                style={
+                    'textAlign': 'center',
+                    'width': '30%',
+                    'height': '30%',
+                    'margin-left': '19%'
+                }
+            ),
+
+            html.Br(),
+            html.Br(),
+            html.Br(),
+            html.Br(),
+
+            # TODO: Insert the title for the graph here
+
+            html.H2(
+                children=['All Speeds Captured'],
+                style={
+                    'textAlign': 'center',
+                    'color': colors['text']
+                }
+            ),
+
+            dcc.Graph(
+                id='alldatascatter',
+                style={'backgroundColor': colors['background'],
+                       'width': '75%',
+                       'height': '75%',
+                       'textAlign': 'center',
+                       'margin-left': '12.5%'}
+            ),
+        ]),
+
+        # dcc.Graph(
+        #     id='Graph1',
+        #     figure={
+        #         'data': [
+        #             {'x': [1, 2, 3], 'y': [4, 1, 2], 'type': 'bar', 'name': 'SF'},
+        #             {'x': [1, 2, 3], 'y': [2, 4, 5], 'type': 'bar', 'name': u'Montréal'},
+        #         ],
+        #         'layout': {
+        #             'plot_bgcolor': colors['background'],
+        #             'paper_bgcolor': colors['background'],
+        #             'font': {
+        #                 'color': colors['text']
+        #             }
+        #         }
+        #     }
+        # ),
+
+        dcc.Interval(
+            id='interval-component',
+            interval=30000,
+            n_intervals=0
+        )
+    ])
+
+    app.run_server(debug=True)
+
+
+@app.callback([Output('topofday', 'children'), Output('topalltime', 'children'), Output('toptodayimg', 'src'),
+               Output('topalltimeimg', 'src'), Output('alldatascatter', 'figure')],
+              Input('interval-component', 'n_intervals')
+              )
+def fastest(trigger):
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.Table('maintable')
+
+    # Going to have to get all the results and go through them manually because nosql queries suck
+    result = table.scan()
+    items = result['Items']
+
+    time = datetime.datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
+
+    # Checking if this new entry is the top speed of the day or the top speed ever
+    entries = []
+    todaysentries = []
+    topspeed = 5
+    topspeedurl = ''
+    todaystopspeed = 5
+    todaystopurl = ''
+
+    for entry in items:
+        entry['speed'] = float(entry['speed'])
+        entries.append(entry)
+        if entry['speed'] > topspeed:
+            topspeed = entry['speed']
+            topspeedurl = entry['picture']
+
+        if entry['time'][:10] == time[:10]:
+            todaysentries.append(entry)
+            if entry['speed'] > todaystopspeed:
+                todaystopspeed = entry['speed']
+                todaystopurl = entry['picture']
+
+    dates = [x['time'][:14] for x in entries]
+    dates = sorted(dates)
+    speeds = [x['speed'] for x in entries]
+
+    df = pd.DataFrame({
+        "x": dates,
+        "y": speeds,
+    })
+
+    fig = px.scatter(df, x="x", y='y')
+    fig.update_traces(marker_size=15)
+    # fig.update_layout(plot_bgcolor='#eee2d2')
+
+    # topspeedurl_img = requests.get(topspeedurl).content
+    # with open('speedcaps/topspeedpic.jpg', 'wb') as handler:
+    #     handler.write(topspeedurl_img)
+    #
+    # topofday_img = requests.get(todaystopurl).content
+    # with open('speedcaps/topofdaypic.jpg', 'wb') as handler:
+    #     handler.write(topofday_img)
+
+    print(topspeed)
+    print(todaystopspeed)
+
+    return todaystopspeed, topspeed, todaystopurl, topspeedurl, fig
+
 
 def checkdb(time, passedspeed, frame):
     dynamodb = boto3.resource('dynamodb')
@@ -57,7 +286,7 @@ def checkdb(time, passedspeed, frame):
     # print(items)
 
     # Checking if this new entry is the top speed of the day or the top speed ever
-    todayentries = []
+    todayentries = [{'time': '', 'speed': 5}]
     allentries = []
     for entry in items:
         entry['speed'] = float(entry['speed'])
@@ -71,11 +300,6 @@ def checkdb(time, passedspeed, frame):
     print('Most recent speed: {}'.format(passedspeed))
     # print(mostrecent)
     if passedspeed > todayentries[-1]['speed'] or passedspeed > allentries[-1]['speed']:
-        # this is where the top of the day will be updated through another method OR top ever
-        # TODO: make method with dash where there will be something that displays top speeder of day and top speeder ever that changes dynamically
-        # REMEMBER THAT IF IT IS THE FASTEST EVER, IT WOULD ALSO BE THE FASTEST OF THE DAY
-        # todaystop = mostrecent
-
         filename = "C:\\Users\\Thomas\\Documents\\GitHub\\Real Speedometer\\speedcaps\\speedcap-" + time + ".jpg"
         cv2.imwrite(filename, frame)
 
@@ -88,7 +312,7 @@ def checkdb(time, passedspeed, frame):
         )
 
         cloudinary.uploader.upload(filename, public_id=filename[-32:])
-        cloudinary.utils.cloudinary_url(filename[-32:]+'.jpg')
+        cloudinary.utils.cloudinary_url(filename[-32:] + '.jpg')
         os.remove(filename)
 
         print('Yay this finally works')
@@ -149,10 +373,10 @@ def main():
             if cv2.contourArea(contour) < 4000:
                 continue
             (x, y, w, h) = cv2.boundingRect(contour)
-            cv2.rectangle(frameinuse, (x, y), (x+w, y+h), (0, 255, 0), 3)
+            cv2.rectangle(frameinuse, (x, y), (x + w, y + h), (0, 255, 0), 3)
             if prevx is None:
                 prevx = 0
-            inches = abs(x - prevx) * (22/1280)
+            inches = abs(x - prevx) * (22 / 1280)
             speed = inches * (30 / 17.6)  # inches * fps of video / 17.6 to convert into mph
             speedlist.append(speed)
             prevx = x
@@ -170,7 +394,8 @@ def main():
 
         frame_copy = frameinuse.copy()
         recentavgspeed = mean(speedlist[-10:])
-        cv2.putText(frame_copy, "Current (avg) speed: {:.2f}".format(recentavgspeed), (carx, cary - 60), font, 0.7, (0, 0, 200), 2)
+        cv2.putText(frame_copy, "Current (avg) speed: {:.2f}".format(recentavgspeed), (carx, cary - 60), font, 0.7,
+                    (0, 0, 200), 2)
         cv2.imshow('Capturing', frame)
         cv2.imshow('basic_window', frame_copy)
         key = cv2.waitKey(1)
@@ -186,4 +411,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    # MAY HAVE TO THREAD MAIN AND THE APP AT THE SAME TIME?
+    dashapp()
