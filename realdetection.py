@@ -2,14 +2,12 @@ import cv2
 import datetime
 from datetime import timedelta
 import os
-import numpy
 import boto3
 from statistics import mean
 import cloudinary
 import cloudinary.uploader
 import cloudinary.api
 from decimal import *
-import requests
 import threading
 import dash
 import dash_core_components as dcc
@@ -17,6 +15,7 @@ import dash_html_components as html
 from dash.dependencies import Input, Output
 import pandas as pd
 import plotly.express as px
+import statsmodels
 
 # table = dynamodb.create_table(
 #     TableName='maintable',
@@ -167,7 +166,6 @@ def dashapp():
             html.Br(),
             html.Br(),
 
-            # TODO: Insert the title for the graph here
 
             html.H2(
                 children=['All Speeds Captured'],
@@ -238,7 +236,6 @@ def fastest(trigger):
 
     for entry in items:
         entry['speed'] = float(entry['speed'])
-        entries.append(entry)
         if entry['speed'] > topspeed:
             topspeed = entry['speed']
             topspeedurl = entry['picture']
@@ -248,17 +245,20 @@ def fastest(trigger):
             if entry['speed'] > todaystopspeed:
                 todaystopspeed = entry['speed']
                 todaystopurl = entry['picture']
+        entry['time'] = datetime.datetime.strptime(entry['time'][:13], "%m-%d-%Y-%H")
+        entries.append(entry)
+        # print(entry)
 
-    dates = [x['time'][:14] for x in entries]
-    dates = sorted(dates)
+    entries = sorted(entries, key=lambda i: i['time'])
+    dates = [x['time'] for x in entries]
     speeds = [x['speed'] for x in entries]
 
     df = pd.DataFrame({
-        "x": dates,
-        "y": speeds,
+        "Dates": dates,
+        "Speeds": speeds,
     })
 
-    fig = px.scatter(df, x="x", y='y')
+    fig = px.scatter(df, x="Dates", y='Speeds', trendline='ols')
     fig.update_traces(marker_size=15)
     # fig.update_layout(plot_bgcolor='#eee2d2')
 
@@ -283,7 +283,6 @@ def checkdb(time, passedspeed, frame):
     # Going to have to get all the results and go through them manually because nosql queries suck
     result = table.scan()
     items = result['Items']
-    # print(items)
 
     # Checking if this new entry is the top speed of the day or the top speed ever
     todayentries = [{'time': '', 'speed': 5}]
@@ -314,8 +313,6 @@ def checkdb(time, passedspeed, frame):
         cloudinary.uploader.upload(filename, public_id=filename[-32:])
         cloudinary.utils.cloudinary_url(filename[-32:] + '.jpg')
         os.remove(filename)
-
-        print('Yay this finally works')
 
     else:
         table.put_item(
@@ -370,42 +367,38 @@ def main():
         font = cv2.FONT_HERSHEY_SIMPLEX
 
         for contour in cnts:
-            if cv2.contourArea(contour) < 4000:
+            if cv2.contourArea(contour) < 10000:
                 continue
             (x, y, w, h) = cv2.boundingRect(contour)
             cv2.rectangle(frameinuse, (x, y), (x + w, y + h), (0, 255, 0), 3)
-            if prevx is None:
-                prevx = 0
-            inches = abs(x - prevx) * (22 / 1280)
+            if prevx is None or prevx < 200 or prevx > 1000:
+                prevx = x
+            inches = abs(x - prevx) * (504 / 1280)
             speed = inches * (30 / 17.6)  # inches * fps of video / 17.6 to convert into mph
             speedlist.append(speed)
-            prevx = x
             carx = x
             cary = y
 
             currdt = datetime.datetime.now()
             currtime = datetime.datetime.now().strftime("%m-%d-%Y-%H-%M-%S")
 
-            if x >= 640 and (prevdt + timedelta(seconds=3)) < currdt and speed > 5:
+            if 200 <= x <= 1000 and (prevdt + timedelta(seconds=3)) < currdt and speed > 15 and x > prevx:
                 prevdt = currdt
                 dbthread = threading.Thread(target=checkdb, args=(currtime, speed, frame))
                 dbthread.start()
-                # checkdb(currtime)
+
+            prevx = x
 
         frame_copy = frameinuse.copy()
         recentavgspeed = mean(speedlist[-10:])
         cv2.putText(frame_copy, "Current (avg) speed: {:.2f}".format(recentavgspeed), (carx, cary - 60), font, 0.7,
                     (0, 0, 200), 2)
         cv2.imshow('Capturing', frame)
-        cv2.imshow('basic_window', frame_copy)
+        cv2.imshow('Contour_window', frame_copy)
         key = cv2.waitKey(1)
         if key == ord('q'):
             break
 
-    # for i in range(0, len(times), 2):
-    #     df = df.append({"Start": times[i], "End": times[i+1]}, ignore_index=True)
-    #
-    # df.to_csv("Times_"+datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")+".csv")
     video.release()
     cv2.destroyAllWindows()
 
@@ -413,4 +406,6 @@ def main():
 if __name__ == '__main__':
     # main()
     # MAY HAVE TO THREAD MAIN AND THE APP AT THE SAME TIME?
+    opencvthread = threading.Thread(target=main)
+    opencvthread.start()
     dashapp()
